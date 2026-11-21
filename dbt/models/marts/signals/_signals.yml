@@ -1,0 +1,81 @@
+version: 2
+
+models:
+  - name: insider_clusters
+    description: >
+      Cluster buys: >= cluster_min_insiders distinct insiders buying on the open market
+      within cluster_window_days, total value >= cluster_min_value_usd.
+    columns:
+      - name: cluster_id
+        data_tests: [unique, not_null]
+      - name: issuer_cik
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_company')
+              field: issuer_cik
+      - name: signal_date
+        data_tests: [not_null]
+      - name: n_insiders
+        data_tests: [not_null]
+      - name: total_value_usd
+        data_tests: [not_null]
+
+  - name: cluster_returns
+    description: 30/90-day forward returns of each cluster vs SPY.
+    columns:
+      - name: cluster_id
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('insider_clusters')
+              field: cluster_id
+
+unit_tests:
+  - name: test_cluster_detection_rules
+    description: >
+      A: 3 insiders within 9 days, $300k -> cluster.  B: 3rd insider 11 days later -> no.
+      C: 3 insiders but only $30k -> no.  D: one insider buying 3 times -> no.
+      E: two separate clusters 40 days apart -> 2 clusters.
+    model: insider_clusters
+    overrides:
+      vars:
+        cluster_min_insiders: 3
+        cluster_window_days: 10
+        cluster_min_value_usd: 250000
+    given:
+      - input: ref('fact_insider_transaction')
+        format: csv
+        rows: |
+          issuer_cik,insider_cik,transaction_date,filing_date,transaction_value,is_open_market_purchase,is_valid_transaction_date
+          A,i1,2026-01-01,2026-01-02,100000,true,true
+          A,i2,2026-01-05,2026-01-06,100000,true,true
+          A,i3,2026-01-09,2026-01-12,100000,true,true
+          A,i3,2026-01-09,2026-01-12,500,false,true
+          B,i1,2026-01-01,2026-01-02,200000,true,true
+          B,i2,2026-01-05,2026-01-06,200000,true,true
+          B,i3,2026-01-12,2026-01-13,200000,true,true
+          C,i1,2026-01-01,2026-01-02,10000,true,true
+          C,i2,2026-01-02,2026-01-03,10000,true,true
+          C,i3,2026-01-03,2026-01-04,10000,true,true
+          D,i1,2026-01-01,2026-01-02,500000,true,true
+          D,i1,2026-01-02,2026-01-03,500000,true,true
+          D,i1,2026-01-03,2026-01-04,500000,true,true
+          E,i1,2026-01-01,2026-01-02,100000,true,true
+          E,i2,2026-01-02,2026-01-03,100000,true,true
+          E,i3,2026-01-03,2026-01-05,100000,true,true
+          E,i4,2026-02-10,2026-02-11,100000,true,true
+          E,i5,2026-02-11,2026-02-12,100000,true,true
+          E,i6,2026-02-12,2026-02-13,100000,true,true
+      - input: ref('dim_insider')
+        rows: []
+      - input: ref('dim_company')
+        rows: []
+    expect:
+      format: csv
+      rows: |
+        issuer_cik,cluster_start,cluster_end,signal_date,n_insiders,total_value_usd
+        A,2026-01-01,2026-01-09,2026-01-12,3,300000.00
+        E,2026-01-01,2026-01-03,2026-01-05,3,300000.00
+        E,2026-02-10,2026-02-12,2026-02-13,3,300000.00
