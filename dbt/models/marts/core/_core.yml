@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: dim_date
+    description: Calendar dimension 2000-2030.
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: dim_company
+    description: One row per issuer (SEC CIK), latest name and ticker.
+    columns:
+      - name: issuer_cik
+        data_tests: [unique, not_null]
+
+  - name: dim_insider
+    description: One row per insider (reporting owner CIK), latest name and role.
+    columns:
+      - name: insider_cik
+        data_tests: [unique, not_null]
+      - name: role_label
+        data_tests: [not_null]
+
+  - name: fact_insider_transaction
+    description: One row per non-derivative Form 4 transaction line.
+    columns:
+      - name: transaction_key
+        data_tests: [unique, not_null]
+      - name: accession_no
+        data_tests: [not_null]
+      - name: issuer_cik
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_company')
+              field: issuer_cik
+      - name: insider_cik
+        data_tests:
+          - not_null:
+              config:
+                severity: warn  # a handful of filings list no parseable owner CIK
+          - relationships:
+              to: ref('dim_insider')
+              field: insider_cik
+      - name: transaction_date_key
+        data_tests:
+          - relationships:
+              to: ref('dim_date')
+              field: date_day
+      - name: transaction_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              # SEC Form 4 transaction codes (General Instructions, item 8)
+              values: ["P", "S", "V", "A", "D", "F", "I", "M", "C", "E", "H", "O", "X",
+                       "G", "L", "W", "Z", "J", "K", "U"]
+              config:
+                severity: warn
+      - name: acquired_disposed
+        data_tests:
+          - accepted_values:
+              values: ["A", "D"]
+              config:
+                where: "acquired_disposed is not null"
+      - name: source
+        data_tests:
+          - accepted_values:
+              values: ["edgar_daily", "sec_dataset"]
