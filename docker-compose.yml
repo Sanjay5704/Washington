@@ -1,0 +1,155 @@
+# Washington local stack. Everything runs on one laptop (tested on 16 GB RAM).
+#   docker compose up -d                      -> postgres, minio, airflow, dashboard
+#   docker compose --profile backfill run --rm spark-backfill   -> 5-year PySpark backfill
+name: washington
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: docker/airflow/Dockerfile
+  image: washington-airflow:latest
+  env_file: .env
+  user: "50000:0"
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__PARALLELISM: "4"
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY}
+    AIRFLOW__WEBSERVER__WORKERS: "2"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    PYTHONPATH: /opt/washington/src
+    WASHINGTON_DBT_DIR: /opt/washington/dbt
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - ./airflow/logs:/opt/airflow/logs
+    - ./src:/opt/washington/src
+    - ./sql:/opt/washington/sql
+    - ./dbt:/opt/washington/dbt
+  depends_on: &airflow-depends
+    postgres:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file: .env
+    command: >
+      postgres -c shared_buffers=512MB -c work_mem=32MB
+      -c maintenance_work_mem=256MB -c max_connections=100
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init-airflow-db.sh:/docker-entrypoint-initdb.d/10-airflow-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+    mem_limit: 2g
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    env_file: .env
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      retries: 20
+    mem_limit: 512m
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create --username "$${AIRFLOW_ADMIN_USER}" --password "$${AIRFLOW_ADMIN_PASSWORD}" \
+          --firstname Admin --lastname User --role Admin --email admin@example.com || true
+        # One slot = only one task talks to SEC at a time, so the rate limit holds across DAG runs.
+        airflow pools set sec_edgar 1 "SEC EDGAR fair-access (single client)"
+        python -m washington.cli init-db
+    restart: "no"
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+    mem_limit: 1500m
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    mem_limit: 2500m
+    restart: unless-stopped
+    depends_on:
+      <<: *airflow-depends
+      airflow-init:
+        condition: service_completed_successfully
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    image: washington-dashboard:latest
+    env_file: .env
+    environment:
+      PYTHONPATH: /opt/washington/src
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src:/opt/washington/src
+      - ./dashboard:/opt/washington/dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 768m
+    restart: unless-stopped
+
+  spark-backfill:
+    profiles: ["backfill"]
+    build:
+      context: .
+      dockerfile: docker/spark/Dockerfile
+    image: washington-spark:latest
+    env_file: .env
+    environment:
+      PYTHONPATH: /opt/washington/src
+      SPARK_DRIVER_MEMORY: 3g
+    volumes:
+      - ./src:/opt/washington/src
+      - ./sql:/opt/washington/sql
+      - ./spark:/opt/washington/spark
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    mem_limit: 4g
+    command: ["python", "/opt/washington/spark/backfill_form345.py"]
+
+volumes:
+  pgdata:
+  miniodata:
