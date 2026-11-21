@@ -1,0 +1,25 @@
+name: washington
+version: "1.0.0"
+config-version: 2
+profile: washington
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: target
+clean-targets: ["target", "logs"]
+
+vars:
+  # Cluster definition. Override at run time: dbt run --vars '{cluster_min_value_usd: 500000}'
+  cluster_min_insiders: 3
+  cluster_window_days: 10
+  cluster_min_value_usd: 250000
+
+models:
+  washington:
+    staging:
+      +materialized: view
+      +schema: stg
+    marts:
+      +materialized: table
+      +schema: gold

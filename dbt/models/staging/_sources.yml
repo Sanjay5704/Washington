@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+  - name: silver
+    description: Parsed, typed, de-duplicated Form 4 data loaded by the Python and PySpark jobs.
+    schema: silver
+    tables:
+      - name: form4_filings
+        columns:
+          - name: accession_no
+            data_tests: [unique, not_null]
+          - name: issuer_cik
+            data_tests: [not_null]
+          - name: source
+            data_tests:
+              - accepted_values:
+                  values: ["edgar_daily", "sec_dataset"]
+      - name: form4_reporting_owners
+      - name: form4_nonderiv_transactions
+      - name: stock_prices
+
+models:
+  - name: stg_form4_filings
+    description: One row per Form 4 filing.
+    columns:
+      - name: accession_no
+        data_tests: [unique, not_null]
+  - name: stg_form4_owners
+    description: One row per (filing, reporting owner).
+    data_tests:
+      - unique_combination_of_columns:
+          columns: [accession_no, owner_cik]
+  - name: stg_form4_transactions
+    description: One row per non-derivative transaction line.
+    columns:
+      - name: transaction_key
+        data_tests: [unique, not_null]
+      - name: acquired_disposed
+        data_tests:
+          - accepted_values:
+              values: ["A", "D"]
+              config:
+                where: "acquired_disposed is not null"
+  - name: stg_stock_prices
+    description: Daily adjusted close per ticker.
