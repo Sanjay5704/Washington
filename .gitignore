@@ -1,0 +1,24 @@
+# secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+.venv*/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# dbt
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+logs/
+
+# airflow runtime
+airflow/logs/
+airflow/plugins/
+
+# local data
+data/
+*.zip
