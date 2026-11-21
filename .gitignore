@@ -22,3 +22,4 @@ airflow/plugins/
 # local data
 data/
 *.zip
+dbt/.user.yml
