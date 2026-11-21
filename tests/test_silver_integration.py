@@ -1,6 +1,6 @@
 """Needs a real PostgreSQL. Runs in CI (service container) and locally against docker compose:
 
-    $env:WASHINGTON_TEST_DB=1; $env:POSTGRES_HOST="localhost"; $env:POSTGRES_PORT=5433; pytest
+$env:WASHINGTON_TEST_DB=1; $env:POSTGRES_HOST="localhost"; $env:POSTGRES_PORT=5433; pytest
 """
 
 from __future__ import annotations

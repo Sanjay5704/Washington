@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: washington
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: washington
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U washington" --health-interval 5s --health-retries 10
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: washington
+      POSTGRES_PASSWORD: ci_password
+      POSTGRES_DB: washington
+      WASHINGTON_TEST_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev]"
+      - name: Ruff lint
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Pytest (unit + database integration)
+        run: pytest -v
+
+  dbt-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dbt
+        run: pip install "dbt-core==1.9.4" "dbt-postgres==1.9.0"
+      - name: dbt parse
+        working-directory: dbt
+        run: dbt parse --profiles-dir .
