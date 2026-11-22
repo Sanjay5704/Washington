@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install dbt
-        run: pip install "dbt-core==1.9.4" "dbt-postgres==1.9.0"
+        run: pip install "dbt-core==1.10.23" "dbt-postgres==1.10.2"
       - name: dbt parse
         working-directory: dbt
         run: dbt parse --profiles-dir .
