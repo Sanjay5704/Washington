@@ -20,6 +20,13 @@ log = logging.getLogger(__name__)
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
+def is_missing_object(response: requests.Response) -> bool:
+    """SEC's file store answers 'no such file' (e.g. no daily index on a weekend) with an
+    S3-style 403 XML body <Code>AccessDenied</Code>, not a 404. SEC's real rate-limit block
+    is also a 403, but an HTML page, so we only treat the S3 XML form as 'not found'."""
+    return response.status_code == 403 and "<Code>AccessDenied</Code>" in response.text[:500]
+
+
 class RateLimiter:
     """Simple 'minimum gap between requests' limiter. Thread-safe."""
 
@@ -96,7 +103,7 @@ class SecClient:
             else:
                 if response.status_code == 200:
                     return response
-                if response.status_code == 404:
+                if response.status_code == 404 or is_missing_object(response):
                     return None
                 last_error = f"HTTP {response.status_code}"
                 if response.status_code not in RETRY_STATUS:

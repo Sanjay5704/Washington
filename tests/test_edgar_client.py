@@ -117,7 +117,16 @@ def test_gives_up_after_max_retries() -> None:
 
 
 def test_403_is_not_retried() -> None:
-    client, session = make_client([FakeResponse(403)], [])
+    client, session = make_client([FakeResponse(403, "<html>Request Rate Threshold Exceeded")], [])
     with pytest.raises(SecClientError):
         client.get("u")
+    assert session.calls == 1
+
+
+def test_s3_access_denied_403_means_not_found() -> None:
+    # SEC's file store answers a missing object (e.g. no index on a Saturday) with an
+    # S3-style 403 AccessDenied XML body instead of a 404.
+    body = '<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message>'
+    client, session = make_client([FakeResponse(403, body)], [])
+    assert client.get("u") is None
     assert session.calls == 1
