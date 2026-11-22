@@ -14,7 +14,8 @@ sources:
           - name: source
             data_tests:
               - accepted_values:
-                  values: ["edgar_daily", "sec_dataset"]
+                  arguments:
+                    values: ["edgar_daily", "sec_dataset"]
       - name: form4_reporting_owners
       - name: form4_nonderiv_transactions
       - name: stock_prices
@@ -29,7 +30,8 @@ models:
     description: One row per (filing, reporting owner).
     data_tests:
       - unique_combination_of_columns:
-          columns: [accession_no, owner_cik]
+          arguments:
+            columns: [accession_no, owner_cik]
   - name: stg_form4_transactions
     description: One row per non-derivative transaction line.
     columns:
@@ -38,7 +40,8 @@ models:
       - name: acquired_disposed
         data_tests:
           - accepted_values:
-              values: ["A", "D"]
+              arguments:
+                values: ["A", "D"]
               config:
                 where: "acquired_disposed is not null"
   - name: stg_stock_prices
