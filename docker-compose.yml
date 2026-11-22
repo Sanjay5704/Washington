@@ -1,4 +1,4 @@
-# Washington local stack. Everything runs on one laptop (tested on 16 GB RAM).
+# Washington local stack. Everything runs on one laptop (fits in the ~4 GB Docker Desktop VM of a 16 GB laptop).
 #   docker compose up -d                      -> postgres, minio, airflow, dashboard
 #   docker compose --profile backfill run --rm spark-backfill   -> 5-year PySpark backfill
 name: washington
@@ -38,8 +38,8 @@ services:
     image: postgres:16-alpine
     env_file: .env
     command: >
-      postgres -c shared_buffers=512MB -c work_mem=32MB
-      -c maintenance_work_mem=256MB -c max_connections=100
+      postgres -c shared_buffers=256MB -c work_mem=16MB
+      -c maintenance_work_mem=128MB -c max_connections=100
     ports:
       - "5433:5432"
     volumes:
@@ -49,7 +49,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       retries: 20
-    mem_limit: 2g
+    mem_limit: 1g
     restart: unless-stopped
 
   minio:
@@ -65,7 +65,7 @@ services:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       retries: 20
-    mem_limit: 512m
+    mem_limit: 384m
     restart: unless-stopped
 
   airflow-init:
@@ -92,7 +92,7 @@ services:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 30s
       retries: 5
-    mem_limit: 1500m
+    mem_limit: 1200m
     restart: unless-stopped
     depends_on:
       <<: *airflow-depends
@@ -102,7 +102,7 @@ services:
   airflow-scheduler:
     <<: *airflow-common
     command: scheduler
-    mem_limit: 2500m
+    mem_limit: 1800m
     restart: unless-stopped
     depends_on:
       <<: *airflow-depends
@@ -125,7 +125,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    mem_limit: 768m
+    mem_limit: 512m
     restart: unless-stopped
 
   spark-backfill:
@@ -137,7 +137,7 @@ services:
     env_file: .env
     environment:
       PYTHONPATH: /opt/washington/src
-      SPARK_DRIVER_MEMORY: 3g
+      SPARK_DRIVER_MEMORY: 2g
     volumes:
       - ./src:/opt/washington/src
       - ./sql:/opt/washington/sql
@@ -147,7 +147,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    mem_limit: 4g
+    mem_limit: 2800m
     command: ["python", "/opt/washington/spark/backfill_form345.py"]
 
 volumes:
