@@ -5,10 +5,10 @@
   A "cluster buy" = at least N distinct insiders of the same company making open-market
   purchases (code P) within a rolling W-day window, with total value >= V dollars.
   N, W, V come from dbt vars (see dbt_project.yml).
+  Note: vars are interpolated as plain {{ var(...) }} and any arithmetic happens in SQL.
+  Jinja filters/maths on var() (e.g. var('x') | int) make dbt's unit-test rendering fail
+  with "'var' is undefined" (seen on dbt 1.9 and 1.10).
 -#}
-{%- set min_insiders = var('cluster_min_insiders') | int -%}
-{%- set window_days = var('cluster_window_days') | int -%}
-{%- set min_value = var('cluster_min_value_usd') -%}
 
 with
 
@@ -46,7 +46,9 @@ rolling as (
     window w as (
         partition by issuer_cik
         order by transaction_date
-        range between interval '{{ window_days - 1 }} days' preceding and current row
+        range between
+            interval '1 day' * ({{ var('cluster_window_days') }} - 1) preceding
+            and current row
     )
 ),
 
@@ -60,8 +62,9 @@ qualifying_windows as (
         window_value_usd,
         window_last_filing_date
     from rolling
-    where (select count(distinct i) from unnest(window_insiders) as i) >= {{ min_insiders }}
-      and window_value_usd >= {{ min_value }}
+    where (select count(distinct i) from unnest(window_insiders) as i)
+            >= {{ var('cluster_min_insiders') }}
+      and window_value_usd >= {{ var('cluster_min_value_usd') }}
     order by issuer_cik, anchor_date
 ),
 

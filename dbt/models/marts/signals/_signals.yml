@@ -12,8 +12,9 @@ models:
         data_tests:
           - not_null
           - relationships:
-              to: ref('dim_company')
-              field: issuer_cik
+              arguments:
+                to: ref('dim_company')
+                field: issuer_cik
       - name: signal_date
         data_tests: [not_null]
       - name: n_insiders
@@ -29,8 +30,9 @@ models:
           - unique
           - not_null
           - relationships:
-              to: ref('insider_clusters')
-              field: cluster_id
+              arguments:
+                to: ref('insider_clusters')
+                field: cluster_id
 
 unit_tests:
   - name: test_cluster_detection_rules
