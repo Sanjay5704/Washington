@@ -35,8 +35,12 @@ def parse_master_index(text: str, form_types: tuple[str, ...] = ("4",)) -> list[
     """Return one entry per filing of the wanted form types.
 
     The master index is pipe-delimited: CIK|Company Name|Form Type|Date Filed|File Name.
-    A filing can be listed more than once (once per related CIK), so we de-duplicate on the
-    file name, which contains the accession number.
+    A Form 4 is listed once per related CIK (issuer AND reporting owner), each time under a
+    different folder:
+        edgar/data/100726/0001193125-26-470298.txt    (issuer)
+        edgar/data/1991763/0001193125-26-470298.txt   (reporting owner)
+    so we de-duplicate on the accession number, not the file name. (De-duplicating on the
+    file name downloaded every filing twice; see LEARNING.md.)
     """
     entries: dict[str, IndexEntry] = {}
     for line in text.splitlines():
@@ -46,9 +50,10 @@ def parse_master_index(text: str, form_types: tuple[str, ...] = ("4",)) -> list[
         cik, name, form_type, filed, file_name = (p.strip() for p in parts)
         if form_type not in form_types:
             continue
-        if file_name in entries:
+        accession_no = file_name.rsplit("/", 1)[-1].removesuffix(".txt")
+        if accession_no in entries:
             continue
-        entries[file_name] = IndexEntry(
+        entries[accession_no] = IndexEntry(
             cik=cik,
             company_name=name,
             form_type=form_type,

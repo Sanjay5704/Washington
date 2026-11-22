@@ -27,9 +27,12 @@ def test_parse_master_index_keeps_only_form4() -> None:
 
 
 def test_parse_master_index_dedupes_same_filing_listed_twice() -> None:
+    # Real EDGAR shape: the same accession listed under the issuer's AND the owner's folder.
     line = "100726|UNIFI INC|4|20261120|edgar/data/100726/0001193125-26-470298.txt"
-    dup = "1991763|EAKER ANDREW JAMES|4|20261120|edgar/data/100726/0001193125-26-470298.txt"
-    assert len(parse_master_index(f"{line}\n{dup}\n")) == 1
+    dup = "1991763|EAKER ANDREW JAMES|4|20261120|edgar/data/1991763/0001193125-26-470298.txt"
+    entries = parse_master_index(f"{line}\n{dup}\n")
+    assert len(entries) == 1
+    assert entries[0].accession_no == "0001193125-26-470298"
 
 
 def test_parse_master_index_can_include_amendments() -> None:
