@@ -40,6 +40,9 @@ services:
     command: >
       postgres -c shared_buffers=256MB -c work_mem=16MB
       -c maintenance_work_mem=128MB -c max_connections=100
+    # Docker's default /dev/shm is 64 MB; Postgres parallel queries put hash tables there and
+    # fail with "could not resize shared memory segment ... No space left on device".
+    shm_size: 256mb
     ports:
       - "5433:5432"
     volumes:
