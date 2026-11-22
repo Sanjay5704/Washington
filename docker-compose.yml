@@ -53,16 +53,19 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # minio/minio is no longer published on Docker Hub; this is Bitnami's archived build of
+    # the same MinIO release (RELEASE.2025-04-22). Same S3 API, same root user/password env.
+    image: bitnamilegacy/minio:2025.4.22
     env_file: .env
-    command: server /data --console-address ":9001"
+    environment:
+      MINIO_DEFAULT_BUCKETS: ${BRONZE_BUCKET}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - miniodata:/data
+      - miniodata:/bitnami/minio/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-fs", "http://localhost:9000/minio/health/live"]
       interval: 5s
       retries: 20
     mem_limit: 384m
