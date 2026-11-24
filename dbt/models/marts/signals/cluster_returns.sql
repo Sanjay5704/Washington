@@ -4,6 +4,8 @@
 --   entry  = first trading day AFTER the signal date (filings often land after the close)
 --   exit_N = first trading day on/after entry + N calendar days
 -- Only clusters with prices on both dates get a value; others stay NULL.
+-- Each lateral reads the view directly (not via a shared CTE): Postgres materialises a CTE
+-- that is used more than once, which would hide the (ticker, price_date) index.
 
 with clusters as (
     select cluster_id, ticker, signal_date
@@ -11,16 +13,12 @@ with clusters as (
     where ticker is not null
 ),
 
-prices as (
-    select * from {{ ref('stg_stock_prices') }}
-),
-
 entry as (
     select c.*, p.price_date as entry_date, p.adj_close as entry_price
     from clusters as c
     join lateral (
         select price_date, adj_close
-        from prices
+        from {{ ref('stg_stock_prices') }} as prices
         where prices.ticker = c.ticker
           and price_date > c.signal_date
           and price_date <= c.signal_date + 7
@@ -38,19 +36,19 @@ exit_{{ days }} as (
         spy_x.adj_close / spy_e.adj_close - 1 as spy_return
     from entry as e
     join lateral (
-        select price_date, adj_close from prices
+        select price_date, adj_close from {{ ref('stg_stock_prices') }} as prices
         where prices.ticker = e.ticker
           and price_date >= e.entry_date + {{ days }}
           and price_date <= e.entry_date + {{ days + 7 }}
         order by price_date limit 1
     ) as x on true
     join lateral (
-        select adj_close from prices
+        select adj_close from {{ ref('stg_stock_prices') }} as prices
         where prices.ticker = 'SPY' and price_date >= e.entry_date
         order by price_date limit 1
     ) as spy_e on true
     join lateral (
-        select adj_close from prices
+        select adj_close from {{ ref('stg_stock_prices') }} as prices
         where prices.ticker = 'SPY' and price_date >= x.price_date
         order by price_date limit 1
     ) as spy_x on true
