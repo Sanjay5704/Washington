@@ -154,7 +154,7 @@ primary insider (the lowest owner CIK) and keeps `n_reporting_owners` for transp
 `NYSE: KRC`, `(SIRI)` or `LEN, LEN.B`. Yahoo can't price those, so those clusters were silently
 missing from the returns. Fix: silver keeps the value as filed; a dbt macro
 (`clean_ticker`) maps it to one symbol or NULL, with a unit test of real examples and a data
-test on `dim_company`. The first version made `dim_company` take **163 s** (it was ~5 s before):
+test on `dim_company`. The first version made `dim_company` take **163 s**:
 `EXPLAIN` showed Postgres evaluating the regexes for all ~900k rows as part of the `DISTINCT`
 key, and the view is read three times. Cleaning only the ~10k distinct values, in a CTE
 *after* `DISTINCT`, brought it back to ~10 s.
