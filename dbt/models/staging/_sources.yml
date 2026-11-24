@@ -46,3 +46,37 @@ models:
                 where: "acquired_disposed is not null"
   - name: stg_stock_prices
     description: Daily adjusted close per ticker.
+
+unit_tests:
+  - name: test_clean_ticker
+    description: Hand-typed trading symbols seen in real filings become one clean symbol.
+    model: stg_form4_filings
+    given:
+      - input: source('silver', 'form4_filings')
+        format: csv
+        rows: |
+          accession_no,document_type,issuer_ticker
+          a1,4,aapl
+          a2,4,NYSE: KRC
+          a3,4,(SIRI)
+          a4,4,"LEN, LEN.B"
+          a5,4,Z AND ZG
+          a6,4,N O G
+          a7,4,MOGA/MOGB
+          a8,4,BRK.B
+          a9,4,NONE
+          a10,4,--
+    expect:
+      format: csv
+      rows: |
+        accession_no,issuer_ticker
+        a1,AAPL
+        a2,KRC
+        a3,SIRI
+        a4,LEN
+        a5,Z
+        a6,NOG
+        a7,MOGA
+        a8,BRK.B
+        a9,
+        a10,
