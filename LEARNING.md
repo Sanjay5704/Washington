@@ -291,7 +291,15 @@ what's missing from yfinance in batches (plus SPY), and stores adjusted closes i
 *after* the signal date, exit = first close on/after entry + 30 / + 90 calendar days, excess =
 stock return − SPY return over the same dates.
 
-**Trickiest bug.** _(filled in from the real run, see below)_
+**Trickiest bug.** In the daily DAG, `dbt_returns` took **~13 minutes** per run while every
+other task took seconds. The model put the prices in a CTE (`prices as (select * from
+stg_stock_prices)`) and used it in four `LATERAL` lookups. Since Postgres 12, a CTE that is
+referenced more than once is **materialised**: computed once into a temporary result with
+**no indexes**. So each "first price after date X for ticker Y" lookup scanned 1.2M rows
+instead of using the `(ticker, price_date)` primary key. Fix: each lateral reads the view
+directly, which Postgres inlines, so the index is used. Build time went from ~13 min to
+**~2 s**. Lesson: when something is slow, measure per task first (I queried Airflow's
+`task_instance.duration`), then check whether the plan uses the index you expect.
 
 **Interview questions**
 1. *Why adjusted close?* Splits and dividends would otherwise look like crashes or jumps.
