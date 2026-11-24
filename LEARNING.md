@@ -149,6 +149,16 @@ Form 4 together as three reporting owners. If each owner counted as an insider, 
 would look like a 3-insider "cluster". Fix: the fact attributes each filing to a single
 primary insider (the lowest owner CIK) and keeps `n_reporting_owners` for transparency.
 
+**Second bug (found from a dashboard screenshot).** The company drop-down started with
+`(LUMO)`. Issuers type the ticker by hand, and 189 distinct values (6.5k filings) looked like
+`NYSE: KRC`, `(SIRI)` or `LEN, LEN.B`. Yahoo can't price those, so those clusters were silently
+missing from the returns. Fix: silver keeps the value as filed; a dbt macro
+(`clean_ticker`) maps it to one symbol or NULL, with a unit test of real examples and a data
+test on `dim_company`. The first version made `dim_company` take **163 s** (it was ~5 s before):
+`EXPLAIN` showed Postgres evaluating the regexes for all ~900k rows as part of the `DISTINCT`
+key, and the view is read three times. Cleaning only the ~10k distinct values, in a CTE
+*after* `DISTINCT`, brought it back to ~10 s.
+
 **Interview questions**
 1. *Why incremental for the fact and table for the dims?* The fact has ~1.5M rows and only
    grows; reprocessing just new `loaded_at` rows is cheap. Dims are small and "latest value
@@ -223,7 +233,7 @@ ways: red task in the UI, retries with exponential backoff, and an `on_failure_c
 logs loudly (and sends Telegram if configured). dbt lives in its **own virtualenv** inside the
 Airflow image because its pinned dependencies clash with Airflow's.
 
-**Trickiest bugs (three, all from the real run).**
+**Trickiest bugs (five, all from the real run).**
 1. *"No run dates were found."* `airflow dags backfill -s 2026-11-20 -e 2026-11-20` did
    nothing. The DAG's logical dates are at 06:00 UTC, and `-e 2026-11-20` means midnight, which comes *before*
    the 06:00 slot. Fix: `-e 2026-11-20T12:00:00`. Lesson: logical dates are timestamps, not days.
@@ -241,6 +251,12 @@ Airflow image because its pinned dependencies clash with Airflow's.
    blanket "403 = not found" rule would be dangerous, because SEC's *rate-limit block* is also a 403
    (an HTML page). Fix: only the S3 XML form means "not found"; any other 403 still fails
    loudly. Two unit tests pin both cases.
+5. *Docker Desktop died on day 17 of 30* (the laptop slept). After restarting, the backfill
+   **deadlocked**: the task that was running at the crash was stuck in state `restarting`, and
+   backfill waits forever on it. Fix: `airflow tasks clear` for that one task, then relaunch
+   the backfill. Because every step is idempotent, re-running the 18 days that had already run
+   was safe: 17 loaded 0 rows. 2026-10-27 picked up exactly the 1 filing whose download had
+   failed the first time.
 
 **Interview questions**
 1. *Why one date per run?* Idempotent, retryable units: re-running 2026-11-20 touches only
